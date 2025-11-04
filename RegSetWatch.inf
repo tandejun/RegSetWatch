@@ -1,0 +1,73 @@
+;
+; RegSetWatch.inf - Installation file for RegSetWatch driver
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+CatalogFile=RegSetWatch.cat
+DriverVer=11/04/2025,1.0.0.0
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir = 12
+RegSetWatch_Device_CoInstaller_CopyFiles = 11
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+RegSetWatch.sys = 1,,
+
+; ================= Class section =====================
+
+[ClassInstall32]
+Addreg=SystemClassReg
+
+[SystemClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+
+; ================= Install section =================
+
+[Manufacturer]
+%ManufacturerName%=Standard,NTamd64
+
+[Standard.NTamd64]
+%RegSetWatch.DeviceDesc%=RegSetWatch_Device, Root\RegSetWatch
+
+[RegSetWatch_Device.NT]
+CopyFiles=Drivers_Dir
+
+[Drivers_Dir]
+RegSetWatch.sys
+
+; ================= Service installation =============
+
+[RegSetWatch_Device.NT.Services]
+AddService = RegSetWatch,%SPSVCINST_ASSOCSERVICE%, RegSetWatch_Service_Inst
+
+[RegSetWatch_Service_Inst]
+DisplayName    = %RegSetWatch.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\RegSetWatch.sys
+
+[RegSetWatch_Device.NT.Wdf]
+KmdfService =  RegSetWatch, RegSetWatch_wdfsect
+
+[RegSetWatch_wdfsect]
+KmdfLibraryVersion = 1.15
+
+; ================= Strings ========================
+
+[Strings]
+SPSVCINST_ASSOCSERVICE= 0x00000002
+ManufacturerName="RegSetWatch"
+ClassName="System Devices"
+DiskName = "RegSetWatch Installation Disk"
+RegSetWatch.DeviceDesc = "RegSetWatch Registry Monitor"
+RegSetWatch.SVCDESC = "RegSetWatch Registry Timestomping Detection Service"
