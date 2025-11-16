@@ -59,8 +59,4 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
    python main.py
 
 
-📤 Forwarding Logs to the Server (Python)
 
-Copy the exported certificate (from the setup section) into the same folder as your Python script main.py.
-
-Run main.py
