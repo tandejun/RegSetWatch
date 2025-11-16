@@ -1,7 +1,9 @@
 # RegSetWatch
 we stopping timestomping with this one
 
+
 Syslog setup: 
+
 🔧 Setup Instructions
 ### 1. Install Kiwi Syslog Server NG
 
