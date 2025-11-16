@@ -4,54 +4,60 @@ we stopping timestomping with this one
 
 
 
-🔧 Syslog Setup Instructions
+# Kiwi Syslog Server NG – TLS Setup & Python Forwarder
+
+This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-secured syslog messages**, export the TLS certificate, and forward logs using a Python script.
+
+---
+
+## Setup Instructions
+
 ### 1. Install Kiwi Syslog Server NG
+1. Download **Kiwi Syslog Server NG (Trial Version)** from SolarWinds.
+2. After installation, open the **Web Console**.
 
-Download Kiwi Syslog Server NG (Trial Version) from SolarWinds.
+---
 
-After installation, open the Web Console.
+## Configure Secure TCP (TLS) Input
 
-⚙️ Configure Secure TCP (TLS) Input
+1. Open the web console and go to:  
+   **Setup → Settings → Inputs**
+2. Under **Secure TCP**, enable:  
+   **Listen for secure (TLS) TCP Syslog messages**
+3. Select your desired **TCP port**.
+4. Under **Windows Certificate**, choose:  
+   **Kiwi Syslog Server NG**
+5. Click **Apply**.
+6. Restart the Kiwi service:
+   - Open **services.msc**
+   - Find **Kiwi Syslog Server NG**
+   - Click **Restart**
 
-Open the web console and go to:
-Setup → Settings → Inputs
+---
 
-Under Secure TCP, enable:
-✔ Listen for secure (TLS) TCP Syslog messages
+## Export the TLS Certificate
 
-Select your desired TCP port.
+1. Open **certlm.msc**
+2. Navigate to:  
+   **Personal → Certificates**
+3. Right-click **Kiwi Syslog Server NG** → **All Tasks → Export**
+4. Select:  
+   **No, do not export the private key**
+5. Choose the format:  
+   **Base-64 encoded X.509 (.CER)**
+6. Choose output folder & file name.
+7. Click **Finish** to export the certificate.
 
-Under Windows Certificate, choose:
-Kiwi Syslog Server NG
+---
 
-Click Apply.
+## Forwarding Logs to the Server (Python)
 
-Restart the Kiwi service:
+1. Copy the exported certificate (from the setup section) into the same folder as your Python script.
+2. Run the script:
 
-Open services.msc
+   ```bash
+   python main.py
 
-Find Kiwi Syslog Server NG
-
-Click Restart
-
-🔐 Export the TLS Certificate
-
-Open certlm.msc
-
-Navigate to:
-Personal → Certificates
-
-Right-click Kiwi Syslog Server NG → All Tasks → Export
-
-Select:
-No, do not export the private key
-
-Choose the format:
-Base-64 encoded X.509 (.CER)
-
-Choose output folder & file name.
-
-Click Finish to export the certificate.
 
 📤 Forwarding Logs to the Server (Python)
 
