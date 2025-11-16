@@ -2,9 +2,9 @@
 we stopping timestomping with this one
 
 
-Syslog setup: 
 
-🔧 Setup Instructions
+
+🔧 Syslog Setup Instructions
 ### 1. Install Kiwi Syslog Server NG
 
 Download Kiwi Syslog Server NG (Trial Version) from SolarWinds.
