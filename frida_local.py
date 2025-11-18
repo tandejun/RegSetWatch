@@ -73,6 +73,88 @@ function send_call(api, moduleName, args) {
 }
 
 // ---------------------------------------
+// Function to find out key that was timestomped
+// ---------------------------------------
+function getKeyPathFromHandle(handle) {
+    try {
+        const h = ptr(handle);
+
+        if (h.isNull() || h.equals(ptr(-1))) {
+            return "<invalid-handle>";
+        }
+
+        const ObjectNameInformation = 1;
+        const ntdll = Process.getModuleByName("ntdll.dll");
+        const NtQueryObject = new NativeFunction(
+            ntdll.getExportByName("NtQueryObject"),
+            "uint",
+            ["pointer", "uint", "pointer", "uint", "pointer"]
+        );
+
+        let bufSize = 1024;
+        let tries = 0;
+        
+        // Determine architecture to handle struct padding correctly
+        const is64Bit = Process.pointerSize === 8;
+        
+        while (tries++ < 3) {
+            const buf = Memory.alloc(bufSize);
+            const returnLenPtr = Memory.alloc(4);
+
+            const status = NtQueryObject(h, ObjectNameInformation, buf, bufSize, returnLenPtr);
+
+            // STATUS_SUCCESS
+            if (status === 0) {
+                // UNICODE_STRING Structure:
+                // [0x00] USHORT Length
+                // [0x02] USHORT MaximumLength
+                // [0x04] (padding on x64)
+                // [0x04/0x08] PWSTR Buffer (Pointer)
+                
+                const nameLenBytes = buf.readU16();
+                
+                // Calculate offset to the Buffer pointer based on architecture
+                // x86: offset 4, x64: offset 8
+                const bufferPtrOffset = is64Bit ? 8 : 4;
+                
+                const namePtr = buf.add(bufferPtrOffset).readPointer();
+
+                if (nameLenBytes === 0 || namePtr.isNull()) {
+                    return "<empty>";
+                }
+
+                const charCount = Math.floor(nameLenBytes / 2);
+                
+                try {
+                    return namePtr.readUtf16String(charCount) || "<unknown-key-path>";
+                } catch (readErr) {
+                    // detailed error debugging
+                    return `<error-reading-string: ${readErr.message}>`;
+                }
+            }
+
+            // STATUS_INFO_LENGTH_MISMATCH (0xC0000004)
+            if ((status >>> 0) === 0xC0000004) {
+                const required = returnLenPtr.readU32();
+                // Sanity check buffer size (e.g., max 64KB to prevent OOM)
+                if (required > bufSize && required < 65536) {
+                    bufSize = required + 32; // add slight padding
+                    continue;
+                } 
+                return "<buffer-too-large-or-invalid>";
+            }
+
+            return `<unknown-ntstatus: ${status.toString(16)}>`;
+        }
+
+        return "<failed-after-retries>";
+    } catch (e) {
+        return `<exception-resolving-path: ${e.toString()}>`;
+    }
+}
+
+
+// ---------------------------------------
 // Hook function for Frida 17.5.1
 // ---------------------------------------
 function hookApi(moduleName, funcName) {
@@ -109,12 +191,15 @@ function hookApi(moduleName, funcName) {
                     try { keyInfo = args[2].toString(); } catch (_) {}
                     try { infoLen = args[3].toInt32(); } catch (_) {}
 
+                    const keyPath = getKeyPathFromHandle(args[0]);
+
                     send_warning({
                         api: funcName,
                         module: moduleName,
                         timestamp: Date.now(),
                         pid: Process.id,
                         processName: Process.enumerateModules()[0].name,
+                        key_path: keyPath,
                         params: {
                             KeyHandle: keyHandle,
                             KeyInformationClass: infoClass,
@@ -123,7 +208,7 @@ function hookApi(moduleName, funcName) {
                         }
                     });
                     return;
-                }
+                    }
 
                 // Normal argument logging
                 let argVals = [];
@@ -165,8 +250,6 @@ for (const moduleName in hooks) {
 }
 """
 
-
-
 # Storage for all API calls
 api_log = []
 
@@ -204,6 +287,7 @@ def on_message(message, data):
         if p['params']['KeyInformationClass'] == 0:  #KeyInformationClass = 0 refers to KeyLastWriteTimeInformation in KeyLastWriteTimeInformation 
             print("\n⚠️ WARNING — Possible NtSetInformationKey Timestomping DETECTED")
             print(f"Process: {p['processName']} (PID {p['pid']})")
+            print(f"Registry Key: {p.get('key_path', '<unknown>')}")
             print("Parameters:")
             print(f"  KeyHandle           : {p['params']['KeyHandle']}")
             print(f"  KeyInformationClass : {p['params']['KeyInformationClass']}")
