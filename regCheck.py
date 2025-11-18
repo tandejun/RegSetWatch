@@ -248,6 +248,7 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
         child_info = winreg.QueryInfoKey(key_handle)  # open handle to child (target) key
         child_ft = int(child_info[-1])  # read last element to get last modified time
         child_ts = filetime_to_datetime(child_ft)  # convert from windows filetime to datetime in UTC
+        print("Checking child key:", key_path or "<root>", "| LastWriteUTC:", child_ts.isoformat())
     except Exception as e:
         try:
             winreg.CloseKey(key_handle)
@@ -263,6 +264,7 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
         parent_info = winreg.QueryInfoKey(parent_handle)
         parent_ft = int(parent_info[-1])
         parent_ts = filetime_to_datetime(parent_ft)
+        print("Checking parent key: ", parent_path or "<root>", "| LastWriteUTC:", parent_ts.isoformat())
     except Exception as e:
         try:
             winreg.CloseKey(key_handle)
@@ -335,7 +337,7 @@ def main():
             print("[INFO] Daemon stopped by user.")
     else:
         # single-key check 
-        res = check_key_timestomped("HKLM", r"SOFTWARE\360Safe")
+        res = check_key_timestomped("HKLM", r"SOFTWARE\360Safe\RegSetWatch\key1")
         print("check_key_timestomped result:", res)
         for hive, subpath in targets:
             print(f"\n=== Scanning {hive}\\{subpath or '<root>'} ===")
