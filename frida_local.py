@@ -44,7 +44,7 @@ const hooks = %HOOKS%;
 
 // --- Debug: list loaded modules ---
 try {
-    const loaded = Process.enumerateModulesSync().map(m => m.name);
+    const loaded = Process.enumerateModules().map(m => m.name);
     send({
         type: "debug",
         event: "module_info",
@@ -72,7 +72,7 @@ function send_call(api, moduleName, args) {
         module: moduleName,
         timestamp: Date.now(),
         pid: Process.id,
-        processName: Process.name,
+        processName: Process.enumerateModules()[0].name,
         args: args
     });
 }
@@ -150,7 +150,7 @@ function hookApi(moduleName, funcName) {
                         module: moduleName,
                         timestamp: Date.now(),
                         pid: Process.id,
-                        processName: Process.name,
+                        processName: Process.enumerateModules()[0].name,
                         params: {
                             KeyHandle: keyHandle,
                             KeyInformationClass: infoClass,
