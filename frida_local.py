@@ -201,13 +201,14 @@ def on_message(message, data):
     if payload["type"] == "warning":
         p = payload["payload"]
 
-        print("\n WARNING — NtSetInformationKey DETECTED")
-        print(f"Process: {p['processName']} (PID {p['pid']})")
-        print("Parameters:")
-        print(f"  KeyHandle           : {p['params']['KeyHandle']}")
-        print(f"  KeyInformationClass : {p['params']['KeyInformationClass']}")
-        print(f"  KeyInformation      : {p['params']['KeyInformation']}")
-        print(f"  KeyInfoLength       : {p['params']['KeyInformationLength']}\n")
+        if p['params']['KeyInformationClass'] == 0:  #KeyInformationClass = 0 refers to KeyLastWriteTimeInformation in KeyLastWriteTimeInformation 
+            print("\n⚠️ WARNING — Possible NtSetInformationKey Timestomping DETECTED")
+            print(f"Process: {p['processName']} (PID {p['pid']})")
+            print("Parameters:")
+            print(f"  KeyHandle           : {p['params']['KeyHandle']}")
+            print(f"  KeyInformationClass : {p['params']['KeyInformationClass']}")
+            print(f"  KeyInformation      : {p['params']['KeyInformation']}")
+            print(f"  KeyInfoLength       : {p['params']['KeyInformationLength']}\n")
 
 
 def inject(pid):
