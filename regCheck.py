@@ -12,6 +12,8 @@ To adjust the scanned hive/subpath, edit the constants below or import and call 
 
 from __future__ import annotations
 import sys
+import argparse
+import time
 import winreg
 from datetime import datetime, timezone
 from typing import Optional
@@ -298,10 +300,12 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
     }
 
 
-if __name__ == "__main__":
-    # single-key check 
-    res = check_key_timestomped("HKLM", r"SOFTWARE\360Safe")
-    print("check_key_timestomped result:", res)
+def main():
+    parser = argparse.ArgumentParser(description="Registry hive scanner and timestomp detector")
+    parser.add_argument("--daemon", action="store_true", help="Run as a background process, scanning periodically")
+    parser.add_argument("--interval", type=int, default=30, help="Scan interval in minutes (for daemon mode, default of 30 minutes)")
+    parser.add_argument("--max-depth", type=int, default=None, help="Maximum scan depth (None = full)")
+    args = parser.parse_args()
 
     targets = [
         ("HKLM", ""),
@@ -310,13 +314,39 @@ if __name__ == "__main__":
         ("HKCR", ""),             # classes root
     ]
 
-    for hive, subpath in targets:
-        print(f"\n=== Scanning {hive}\\{subpath or '<root>'} ===")
-        res = scan_once(hive, subpath)
-        if not res:
-            continue
-        succ = res.get("opened_count", 0)
-        failed = len(res.get("failed_keys", []))
-        stomped = len(res.get("anomalies", []))
-        print(f"Summary for {hive}\\{subpath or '<root>'}: successful={succ}, failed={failed}, anomaly detected in timestamps={stomped}")
+    if args.daemon:
+        print(f"[INFO] Starting daemon mode: scan every {args.interval} minute(s). Press Ctrl+C to exit.")
+        try:
+            while True:
+                scan_time = datetime.now(timezone.utc).isoformat()
+                print(f"\n[INFO] Scan started at {scan_time}")
+                for hive, subpath in targets:
+                    print(f"============================ Scanning {hive}\\{subpath or '<root>'} ==============================")
+                    res = scan_once(hive, subpath, max_depth=args.max_depth)
+                    if not res:
+                        continue
+                    succ = res.get("opened_count", 0)
+                    failed = len(res.get("failed_keys", []))
+                    stomped = len(res.get("anomalies", []))
+                    print(f"Summary for {hive}\\{subpath or '<root>'}: successful={succ}, failed={failed}, anomaly detected in timestamps={stomped}")
+                print(f"[INFO] Scan complete. Sleeping {args.interval} minute(s)...")
+                time.sleep(args.interval * 60)
+        except KeyboardInterrupt:
+            print("[INFO] Daemon stopped by user.")
+    else:
+        # single-key check 
+        res = check_key_timestomped("HKLM", r"SOFTWARE\360Safe")
+        print("check_key_timestomped result:", res)
+        for hive, subpath in targets:
+            print(f"\n=== Scanning {hive}\\{subpath or '<root>'} ===")
+            res = scan_once(hive, subpath, max_depth=args.max_depth)
+            if not res:
+                continue
+            succ = res.get("opened_count", 0)
+            failed = len(res.get("failed_keys", []))
+            stomped = len(res.get("anomalies", []))
+            print(f"Summary for {hive}\\{subpath or '<root>'}: successful={succ}, failed={failed}, anomaly detected in timestamps={stomped}")
+
+if __name__ == "__main__":
+    main()
   
