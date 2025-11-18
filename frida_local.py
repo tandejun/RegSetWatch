@@ -45,11 +45,6 @@ const hooks = %HOOKS%;
 // --- Debug: list loaded modules ---
 try {
     const loaded = Process.enumerateModules().map(m => m.name);
-    send({
-        type: "debug",
-        event: "module_info",
-        loaded_modules: loaded
-    });
 } catch (e) {
     send({
         type: "debug",
@@ -83,7 +78,7 @@ function send_call(api, moduleName, args) {
 function hookApi(moduleName, funcName) {
 
     // Inform Python that we are trying to hook
-    send({ type: "hooked", api: funcName });
+    //send({ type: "hooked", api: funcName });
 
     let moduleObj = null;
     let addr = null;
@@ -94,45 +89,14 @@ function hookApi(moduleName, funcName) {
 
         // Get export address using module.getExportByName()
         addr = moduleObj.getExportByName(funcName);
-
-        send({
-            type: "debug",
-            event: "resolved",
-            api: funcName,
-            module: moduleName,
-            addr: addr.toString()
-        });
     }
     catch (e) {
-        send({
-            type: "debug",
-            event: "resolve_failed",
-            api: funcName,
-            module: moduleName,
-            error: e.toString()
-        });
         return;
     }
 
     try {
-        send({
-            type: "debug",
-            event: "attaching",
-            api: funcName,
-            module: moduleName,
-            addr: addr.toString()
-        });
-
         Interceptor.attach(addr, {
             onEnter(args) {
-
-                send({
-                    type: "debug",
-                    event: "onEnter",
-                    api: funcName,
-                    module: moduleName
-                });
-
                 // Special: NtSetInformationKey
                 if (funcName === "NtSetInformationKey") {
                     let keyHandle = "<unreadable>";
@@ -171,27 +135,13 @@ function hookApi(moduleName, funcName) {
                     }
                 }
 
-                send_call(funcName, moduleName, argVals);
+                //send_call(funcName, moduleName, argVals);
             },
 
             onLeave(retval) {
                 let r = "<unreadable>";
                 try { r = retval.toString(); } catch (_) {}
-                send({
-                    type: "debug",
-                    event: "onLeave",
-                    api: funcName,
-                    module: moduleName,
-                    retval: r
-                });
             }
-        });
-
-        send({
-            type: "debug",
-            event: "attached",
-            api: funcName,
-            module: moduleName
         });
     }
     catch (e) {
@@ -230,7 +180,8 @@ def on_message(message, data):
     print(payload)
 
     if payload["type"] == "hooked":
-        print(f"[+] Hooked API: {payload['api']}")
+        return
+        #print(f"[+] Hooked API: {payload['api']}")
         
     # Normal API call
     if payload["type"] == "api":
@@ -243,14 +194,14 @@ def on_message(message, data):
         }
         api_log.append(entry)
 
-        print(f"[PID {entry['pid']} - {entry['process']}] {entry['module']}!{entry['api']}")
+        #print(f"[PID {entry['pid']} - {entry['process']}] {entry['module']}!{entry['api']}")
         return
 
     # Special WARNING for NtSetInformationKey
     if payload["type"] == "warning":
         p = payload["payload"]
 
-        print("\n⚠️ WARNING — NtSetInformationKey DETECTED")
+        print("\n WARNING — NtSetInformationKey DETECTED")
         print(f"Process: {p['processName']} (PID {p['pid']})")
         print("Parameters:")
         print(f"  KeyHandle           : {p['params']['KeyHandle']}")
