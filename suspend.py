@@ -2,10 +2,10 @@ import frida
 import sys
 
 # --- Configuration ---
-EXE_PATH = r"C:\Users\ICT3215\Desktop\SetRegTime64.exe"
+EXE_PATH = r"SetRegTime64.exe"
 
 EXE_ARGS = [
-    r"\Registry\Machine\System\mounteddevices",
+    r"\Registry\Machine\Software\mounteddevices",
     "1976:04:01:00:00:00:000:0000",
     "-n"
 ]
@@ -42,6 +42,4 @@ except Exception as e:
     print(f"[-] Unexpected error: {e}")
 
 finally:
-    # ❗️ DO NOT KILL THE PROCESS
-    #     We only resume it, and then leave it running.
     pass
