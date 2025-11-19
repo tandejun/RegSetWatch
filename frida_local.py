@@ -3,6 +3,11 @@ import wmi
 import json
 import threading
 from datetime import datetime
+# Add import for regCheck's helper and check function
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+from regCheck import frida_path_to_hive_and_key, check_key_timestomped
 
 # APIs you want to hook
 HOOKS = {
@@ -283,16 +288,45 @@ def on_message(message, data):
     # Special WARNING for NtSetInformationKey
     if payload["type"] == "warning":
         p = payload["payload"]
-
-        if p['params']['KeyInformationClass'] == 0:  #KeyInformationClass = 0 refers to KeyLastWriteTimeInformation in KeyLastWriteTimeInformation 
+        key_path = p.get('key_path', '<unknown>')
+        if p['params']['KeyInformationClass'] == 0:
             print("\n⚠️ WARNING — Possible NtSetInformationKey Timestomping DETECTED")
             print(f"Process: {p['processName']} (PID {p['pid']})")
-            print(f"Registry Key: {p.get('key_path', '<unknown>')}")
+            print(f"Registry Key: {key_path}")
             print("Parameters:")
             print(f"  KeyHandle           : {p['params']['KeyHandle']}")
             print(f"  KeyInformationClass : {p['params']['KeyInformationClass']}")
             print(f"  KeyInformation      : {p['params']['KeyInformation']}")
             print(f"  KeyInfoLength       : {p['params']['KeyInformationLength']}\n")
+
+            # Call regCheck's timestomp check
+            try:
+                hive, rel_key = frida_path_to_hive_and_key(key_path)
+                result = check_key_timestomped(hive, rel_key)
+                print(f"Timestomp check result: {result}")
+
+                # Run a one-time full scan of all hives and output to CSV
+                from regCheck import scan_once
+
+                all_csv_rows = []
+                targets = ["HKLM", "HKCU", "HKU", "HKCR"]
+                for hive_name in targets:
+                    print(f"[FRIDA_LOCAL] Scanning {hive_name}\\<root>")
+                    res = scan_once(hive_name, "")
+                    if res:
+                        all_csv_rows.extend(res.get("csv_rows", []))
+                csv_file = "frida_scan_output.csv"
+                fieldnames = ["scan_id","scan_time_utc","hive","key_path","lastwrite_iso","parent_path","parent_lastwrite_iso","delta_seconds","anomaly_flag"]
+                import csv
+                with open(csv_file, "w", newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for row in all_csv_rows:
+                        writer.writerow(row)
+                print(f"\n[FRIDA_LOCAL] Full registry scan CSV written to {csv_file} with {len(all_csv_rows)} rows.")
+
+            except Exception as e:
+                print(f"[ERROR] Could not check timestomp: {e}")
 
 
 def inject(pid):

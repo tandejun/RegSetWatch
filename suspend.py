@@ -4,9 +4,18 @@ import sys
 # --- Configuration ---
 EXE_PATH = r"SetRegTime64.exe"
 
+# Sample timestamp: "1976:04:01:00:00:00:000:0000",
+# HKCR\.accdt\ShellEx
+
 EXE_ARGS = [
-    r"\Registry\Machine\Software\mounteddevices",
-    "1976:04:01:00:00:00:000:0000",
+    r"\Registry\Machine\System\MountedDevices",
+    "2025:11:19:00:00:00:000:0000",
+    "-n"
+]
+
+EXE_ARGS2 = [
+    r"\Registry\User\S-1-5-18\Control Panel\Accessibility\Blind Access",
+    "2025:11:19:00:00:00:000:0000",
     "-n"
 ]
 # ---------------------
@@ -14,7 +23,7 @@ EXE_ARGS = [
 spawned_pid = 0
 
 try:
-    command_line = [EXE_PATH] + EXE_ARGS
+    command_line = [EXE_PATH] + EXE_ARGS2
 
     print(f"[*] Spawning command in a suspended state:")
     print(f"    > \"{command_line[0]}\" {' '.join(command_line[1:])}")

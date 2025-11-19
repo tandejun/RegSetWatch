@@ -11,12 +11,36 @@ To adjust the scanned hive/subpath, edit the constants below or import and call 
 """
 
 from __future__ import annotations
+
+# Helper: Convert Frida registry path (e.g. \REGISTRY\MACHINE\SYSTEM\MountedDevices) to hive/key format
+def frida_path_to_hive_and_key(frida_path: str):
+    path = frida_path.lstrip("\\")
+    parts = path.split("\\")
+    if len(parts) < 3:
+        raise ValueError("Invalid registry path format")
+    if parts[0].upper() == "REGISTRY":
+        if parts[1].upper() == "MACHINE":
+            hive = "HKLM"
+        elif parts[1].upper() == "USER":
+            hive = "HKU"
+        elif parts[1].upper() == "CLASSES_ROOT":
+            hive = "HKCR"
+        elif parts[1].upper() == "CURRENT_USER":
+            hive = "HKCU"
+        else:
+            raise ValueError(f"Unknown hive: {parts[1]}")
+        key_path = "\\".join(parts[2:])
+        return hive, key_path
+    else:
+        raise ValueError("Unknown registry root")
 import sys
 import argparse
 import time
 import winreg
 from datetime import datetime, timezone
 from typing import Optional
+import csv
+import uuid
 
 # Simple defaults
 DEFAULT_HIVE = "HKLM"
@@ -88,7 +112,7 @@ def open_key_try_views(hive_const, path):
     raise FileNotFoundError(f"Key not found in any view: {path}")
 
 
-def scan_once(hive_name: str = DEFAULT_HIVE, subpath: str = DEFAULT_SUBPATH, max_depth: Optional[int] = None):
+def scan_once(hive_name: str = DEFAULT_HIVE, subpath: str = DEFAULT_SUBPATH):
     """Scan the hive/subpath once and print each key visited and its LastWriteTime (UTC)."""
     hive = hive_root_from_name(hive_name) # get winreg constant from hive_name
     # use module-level open_key_try_views helper (see defined above)
@@ -108,31 +132,78 @@ def scan_once(hive_name: str = DEFAULT_HIVE, subpath: str = DEFAULT_SUBPATH, max
     opened_count = 1 # opened root key so it starts at 1
     failed_keys: list[tuple[str, str]] = [] # stores key path and error message for failed opens
     anomalies: list[tuple[str, str, str, str, float]] = [] # same parameter list as stack 
+    csv_rows = []
     # threshold in seconds to ignore tiny differences (0 = flag any child strictly newer)
-    anomaly_threshold_seconds = 5.0 
+    anomaly_threshold_seconds = 30.0 
+    scan_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + str(uuid.uuid4())[:8]
+    scan_time_utc = datetime.now(timezone.utc).isoformat()
 
     while stack:
         cur_path, depth, handle, parent_path, parent_ts = stack.pop()
-        # debug: show which frame we're processing
         try:
-            info = winreg.QueryInfoKey(handle) # QueryInfoKey returns metadata about the key
-            # QueryInfoKey returns a tuple; the last element is the last_modified time since 1600.
-            last_modified = int(info[-1]) # returns last modified time as int
-            ts = filetime_to_datetime(last_modified) # convert to datetime in UTC
-            # if we have a parent timestamp, check for anomaly: child newer than parent
-            if parent_ts is not None: # only for non-root keys
+            info = winreg.QueryInfoKey(handle)
+            last_modified = int(info[-1])
+            ts = filetime_to_datetime(last_modified)
+            readable_ts = ts.strftime('%Y-%m-%d %H:%M:%S')
+            readable_parent_ts = parent_ts.strftime('%Y-%m-%d %H:%M:%S') if parent_ts else ""
+            # For each child, compare to parent
+            if parent_ts is not None:
                 try:
                     delta = (ts - parent_ts).total_seconds()
-                    if delta > anomaly_threshold_seconds:
-                        # record anomaly: (parent_path, child_path, parent_ts_iso, child_ts_iso, delta_seconds)
+                    anomaly_flag = delta > anomaly_threshold_seconds
+                    if anomaly_flag:
                         anomalies.append((parent_path or "", cur_path, parent_ts.isoformat(), ts.isoformat(), delta))
-                except Exception:
-                    # if parent_ts isn't a datetime for any reason, skip anomaly check
-                    pass
-            #print(f"{cur_path}  LastWriteUTC: {ts.isoformat()}")
+                    csv_rows.append({
+                        "scan_id": scan_id,
+                        "scan_time_utc": scan_time_utc,
+                        "hive": hive_name,
+                        "key_path": cur_path,
+                        "lastwrite_iso": readable_ts,
+                        "parent_path": parent_path or "",
+                        "parent_lastwrite_iso": readable_parent_ts,
+                        "delta_seconds": delta,
+                        "anomaly_flag": anomaly_flag
+                    })
+                
+                except Exception as e:
+                    csv_rows.append({
+                        "scan_id": scan_id,
+                        "scan_time_utc": scan_time_utc,
+                        "hive": hive_name,
+                        "key_path": cur_path,
+                        "lastwrite_iso": readable_ts,
+                        "parent_path": parent_path or "",
+                        "parent_lastwrite_iso": readable_parent_ts,
+                        "delta_seconds": "",
+                        "anomaly_flag": False
+                    })
+                
+            # For root key, just record
+            else:
+                csv_rows.append({
+                    "scan_id": scan_id,
+                    "scan_time_utc": scan_time_utc,
+                    "hive": hive_name,
+                    "key_path": cur_path,
+                    "lastwrite_iso": readable_ts,
+                    "parent_path": "",
+                    "parent_lastwrite_iso": "",
+                    "delta_seconds": "",
+                    "anomaly_flag": False
+                })
         except Exception as e:
-            # record the error and continue
             failed_keys.append((cur_path, str(e)))
+            csv_rows.append({
+                "scan_id": scan_id,
+                "scan_time_utc": scan_time_utc,
+                "hive": hive_name,
+                "key_path": cur_path,
+                "lastwrite_iso": "",
+                "parent_path": parent_path or "",
+                "parent_lastwrite_iso": readable_parent_ts,
+                "delta_seconds": "",
+                "anomaly_flag": False
+            })
             try:
                 winreg.CloseKey(handle)
             except Exception:
@@ -143,59 +214,33 @@ def scan_once(hive_name: str = DEFAULT_HIVE, subpath: str = DEFAULT_SUBPATH, max
         idx = 0
         while True:
             try:
-                name = winreg.EnumKey(handle, idx) # returns the name of the subkey at index idx
+                name = winreg.EnumKey(handle, idx)
             except OSError:
                 break
             idx += 1
-            # build the registry-open path relative to the hive. If cur_path is empty
-            # (we scanned the hive root) avoid a leading backslash which makes
-            # OpenKey fail ("\Subkey"). Use just the subkey name in that case.
             if cur_path:
                 child_rel = f"{cur_path}\\{name}"
             else:
                 child_rel = name
             try:
-                child_handle = open_key_try_views(hive, child_rel) # open child key
-                opened_count += 1 # increment opened count
+                child_handle = open_key_try_views(hive, child_rel)
+                opened_count += 1
             except FileNotFoundError:
-                # key doesn't exist in this view — record and continue
                 failed_keys.append((child_rel, "Not found in view"))
                 continue
             except Exception as e:
-                # record child open failure (permission or other)
                 failed_keys.append((child_rel, str(e)))
                 continue
-            if max_depth is None or depth + 1 <= max_depth:
-                # pass current key's path and ts as the parent info for the child
-                stack.append((child_rel, depth + 1, child_handle, cur_path, ts))
-            else:
-                try:
-                    winreg.CloseKey(child_handle)
-                except Exception:
-                    pass
+            stack.append((child_rel, depth + 1, child_handle, cur_path, ts))
 
         try:
             winreg.CloseKey(handle)
         except Exception:
             pass
 
-    # final summary (after traversal)
-    # print counts of successful (opened) and failed keys
-    '''
-    if anomalies:
-        print(f"Anomalies ({len(anomalies)}):")
-        for parent, child, p_ts, c_ts, delta in anomalies:
-            print(f"  {parent} -> {child}: parent={p_ts}, child={c_ts}, delta_seconds={delta:.3f}")
-    '''
-    '''
-    if failed_keys:
-        print(f"Failed keys ({len(failed_keys)}):", file=sys.stderr)
-        for k, err in failed_keys:
-            print(f"  {k}: {err}", file=sys.stderr)
-    '''
-
+    # Instead of writing CSV here, return csv_rows for aggregation
     print(f"Scan complete. Successful keys: {opened_count}. Failed keys: {len(failed_keys)}.")
-    return {"opened_count": opened_count, "failed_keys": failed_keys, "anomalies": anomalies}
+    return {"opened_count": opened_count, "failed_keys": failed_keys, "anomalies": anomalies, "csv_rows": csv_rows}
 
 
 def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: float = 2.0):
@@ -206,27 +251,26 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
       key_path: relative path under the hive (use empty string for hive root)
       threshold_seconds: tolerance in seconds; child newer than parent by > threshold
 
-    Returns a dict with keys:
-      - timestomped: True/False/None (None when no parent exists)
-      - parent_ts, child_ts: ISO datetimes or None
-      - delta_seconds: float or None
-      - error: optional error string when the check could not be performed
+        Returns a dict with keys:
+            - anomaly_detected: True/False/None (None when no parent exists)
+            - parent_ts, child_ts: ISO datetimes or None
+            - delta_seconds: float or None
+            - error: optional error string when the check could not be performed
     """
-    print(f"Checking timestomp for {hive_name}\\{key_path or '<root>'} with threshold {threshold_seconds} seconds")
+    print(f"Checking LastWriteTime for {hive_name}\\{key_path or '<root>'} with threshold {threshold_seconds} seconds")
     try:
         hive = hive_root_from_name(hive_name)
     except Exception as e:
-        return {"timestomped": None, "error": str(e)}
+        return {"anomaly_detected": None, "error": str(e)}
 
     # key_path empty means hive root; hive root has no parent so we can't check
     if not key_path:
-        return {"timestomped": None, "error": "Hive root has no parent to compare against"} # if key path is empty
-
+        return {"anomaly_detected": None, "error": "Hive root has no parent to compare against"} # if key path is empty
     # open the target key
     try:        
         key_handle = open_key_try_views(hive, key_path)
     except Exception as e:
-        return {"timestomped": None, "error": f"Failed to open key {hive_name}\\{key_path}: {e}"}
+        return {"anomaly_detected": None, "error": f"Failed to open key {hive_name}\\{key_path}: {e}"}
 
     # find parent path: split off the last component
     if "\\" in key_path:
@@ -242,13 +286,13 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
             winreg.CloseKey(key_handle)
         except Exception:
             pass
-        return {"timestomped": None, "error": f"Failed to open parent {hive_name}\\{parent_path}: {e}"}
+        return {"anomaly_detected": None, "error": f"Failed to open parent {hive_name}\\{parent_path}: {e}"}
 
     try:
         child_info = winreg.QueryInfoKey(key_handle)  # open handle to child (target) key
         child_ft = int(child_info[-1])  # read last element to get last modified time
         child_ts = filetime_to_datetime(child_ft)  # convert from windows filetime to datetime in UTC
-        print("Checking child key:", key_path or "<root>", "| LastWriteUTC:", child_ts.isoformat())
+        print("Checking child key:", key_path or "<root>", "| LastWrite:", child_ts.strftime('%Y-%m-%d %H:%M:%S'))
     except Exception as e:
         try:
             winreg.CloseKey(key_handle)
@@ -258,13 +302,13 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
             winreg.CloseKey(parent_handle)
         except Exception:
             pass
-        return {"timestomped": None, "error": f"Failed to query child key: {e}"}
+        return {"anomaly_detected": None, "error": f"Failed to query child key: {e}"}
 
     try:
         parent_info = winreg.QueryInfoKey(parent_handle)
         parent_ft = int(parent_info[-1])
         parent_ts = filetime_to_datetime(parent_ft)
-        print("Checking parent key: ", parent_path or "<root>", "| LastWriteUTC:", parent_ts.isoformat())
+        print("Checking parent key: ", parent_path or "<root>", "| LastWrite:", parent_ts.strftime('%Y-%m-%d %H:%M:%S'))
     except Exception as e:
         try:
             winreg.CloseKey(key_handle)
@@ -274,14 +318,14 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
             winreg.CloseKey(parent_handle)
         except Exception:
             pass
-        return {"timestomped": None, "error": f"Failed to query parent key: {e}"}
+        return {"anomaly_detected": None, "error": f"Failed to query parent key: {e}"}
 
     # compute delta
     try:
         delta = (child_ts - parent_ts).total_seconds()
-        timestomped = delta > threshold_seconds
+        anomaly_detected = delta > threshold_seconds
     except Exception as e:
-        timestomped = None
+        anomaly_detected = None
         delta = None
 
     # cleanup
@@ -295,7 +339,7 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
         pass
 
     return {
-        "timestomped": timestomped,
+        "anomaly_detected": anomaly_detected,
         "parent_ts": parent_ts.isoformat(),
         "child_ts": child_ts.isoformat(),
         "delta_seconds": delta,
@@ -303,10 +347,10 @@ def check_key_timestomped(hive_name: str, key_path: str, threshold_seconds: floa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Registry hive scanner and timestomp detector")
+    parser = argparse.ArgumentParser(description="Registry hive scanner and LastWriteTime anomaly (Timestomping) detector")
     parser.add_argument("--daemon", action="store_true", help="Run as a background process, scanning periodically")
     parser.add_argument("--interval", type=int, default=30, help="Scan interval in minutes (for daemon mode, default of 30 minutes)")
-    parser.add_argument("--max-depth", type=int, default=None, help="Maximum scan depth (None = full)")
+    parser.add_argument("--manual", type=str, help="Full registry path to manually scan (e.g. HKLM\\SOFTWARE\\Microsoft)")
     args = parser.parse_args()
 
     targets = [
@@ -316,38 +360,59 @@ def main():
         ("HKCR", ""),             # classes root
     ]
 
-    if args.daemon:
-        print(f"[INFO] Starting daemon mode: scan every {args.interval} minute(s). Press Ctrl+C to exit.")
-        try:
-            while True:
-                scan_time = datetime.now(timezone.utc).isoformat()
-                print(f"\n[INFO] Scan started at {scan_time}")
-                for hive, subpath in targets:
-                    print(f"============================ Scanning {hive}\\{subpath or '<root>'} ==============================")
-                    res = scan_once(hive, subpath, max_depth=args.max_depth)
-                    if not res:
-                        continue
-                    succ = res.get("opened_count", 0)
-                    failed = len(res.get("failed_keys", []))
-                    stomped = len(res.get("anomalies", []))
-                    print(f"Summary for {hive}\\{subpath or '<root>'}: successful={succ}, failed={failed}, anomaly detected in timestamps={stomped}")
-                print(f"[INFO] Scan complete. Sleeping {args.interval} minute(s)...")
-                time.sleep(args.interval * 60)
-        except KeyboardInterrupt:
-            print("[INFO] Daemon stopped by user.")
-    else:
-        # single-key check 
-        res = check_key_timestomped("HKLM", r"SOFTWARE\360Safe\RegSetWatch\key1")
-        print("check_key_timestomped result:", res)
+    def run_full_scan_and_write_csv():
+        all_csv_rows = []
         for hive, subpath in targets:
-            print(f"\n=== Scanning {hive}\\{subpath or '<root>'} ===")
-            res = scan_once(hive, subpath, max_depth=args.max_depth)
+            print(f"============================ Scanning {hive}\\{subpath or '<root>'} ==============================")
+            res = scan_once(hive, subpath)
             if not res:
                 continue
             succ = res.get("opened_count", 0)
             failed = len(res.get("failed_keys", []))
             stomped = len(res.get("anomalies", []))
             print(f"Summary for {hive}\\{subpath or '<root>'}: successful={succ}, failed={failed}, anomaly detected in timestamps={stomped}")
+            all_csv_rows.extend(res.get("csv_rows", []))
+        # Write CSV after all hives are scanned
+        csv_file = "scan_output.csv"
+        fieldnames = ["scan_id","scan_time_utc","hive","key_path","lastwrite_iso","parent_path","parent_lastwrite_iso","delta_seconds","anomaly_flag"]
+        with open(csv_file, "w", newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in all_csv_rows:
+                writer.writerow(row)
+        print(f"[INFO] CSV written to {csv_file} with {len(all_csv_rows)} rows.")
+
+    if args.daemon:
+        print(f"[INFO] Starting daemon mode: scan every {args.interval} minute(s). Press Ctrl+C to exit.")
+        try:
+            while True:
+                scan_time = datetime.now(timezone.utc).isoformat()
+                print(f"\n[INFO] Scan started at {scan_time}")
+                run_full_scan_and_write_csv()
+                print(f"[INFO] Scan complete. Sleeping {args.interval} minute(s)...")
+                time.sleep(args.interval * 60)
+        except KeyboardInterrupt:
+            print("[INFO] Daemon stopped by user.")
+    else:
+        # If manual scan argument is provided, parse and run single-key check
+        if args.manual:
+            # Split at first backslash
+            if '\\' in args.manual:
+                hive, key_path = args.manual.split('\\', 1)
+                res = check_key_timestomped(hive, key_path)
+                if "error" in res:
+                    print("Manual check result:", res)
+                else:
+                    if res["anomaly_detected"] is True:
+                        print("Manual check result: Anomaly detected.")
+                    elif res["anomaly_detected"] is False:
+                        print("Manual check result: No anomaly detected.")
+                    else:
+                        print("Manual check result: Unable to determine anomaly status.")
+                    print({k: v for k, v in res.items() if k != "anomaly_detected"})
+            else:
+                print("Invalid manual path format. Use e.g. HKLM\\SOFTWARE\\Microsoft")
+        
 
 if __name__ == "__main__":
     main()
