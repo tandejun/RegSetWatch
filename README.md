@@ -13,7 +13,7 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
 
 ### 1. Install Kiwi Syslog Server NG
 1. Download **Kiwi Syslog Server NG (Trial Version)** from SolarWinds.
-2. After installation, open the **Web Console**.
+2. After installation, open the **Web Console** on localhost port 5000.
 
 ---
 
@@ -56,6 +56,3 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
 
    ```bash
    python main.py
-
-
-
