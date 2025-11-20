@@ -336,7 +336,7 @@ def on_message(message, data):
         return
 
     payload = message["payload"]
-    print(payload)
+    #print(payload)
 
     if payload["type"] == "hooked":
         return
