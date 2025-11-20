@@ -1,11 +1,9 @@
 # RegSetWatch
 we stopping timestomping with this one
-
 <br>
 <br>
 <br>
-
-# Kiwi Syslog Server NG – TLS Setup & Python Forwarder
+## Kiwi Syslog Server NG – TLS Setup & Python Forwarder
 
 This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-secured syslog messages**, export the TLS certificate, and forward logs using a Python script.
 
