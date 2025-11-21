@@ -376,25 +376,6 @@ def on_message(message, data):
                 result = check_key_timestomped(hive, rel_key)
                 print(f"Timestomp check result: {result}")
 
-                sd_params = {
-                    "Process": p['processName'],
-                    "pid": p['pid'],
-                    "RegistryKey": key_path,
-                    "KeyHandle": p['params']['KeyHandle'],
-                    "KeyInformationClass": p['params']['KeyInformationClass'],
-                    "KeyInformation": p['params']['KeyInformation'],
-                    "KeyInformationLength": p['params']['KeyInformationLength'],
-                    "Timestomp check result": result
-                }
-                sd_block = "["
-                for k, v in sd_params.items():
-                    sd_block += f' {k}="{v}"'
-                sd_block += "]"
-                tls_sock = ssl_setup()
-                logger = logger_setup(tls_sock)
-                logger.warning(f"Possible NtSetInformationKey Timestomping DETECTED {sd_block}")
-                tls_sock.close()
-
                 # Run a one-time full scan of all hives and output to CSV
                 from regCheck import scan_once
 
@@ -415,6 +396,25 @@ def on_message(message, data):
                         writer.writerow(row)
                 print(f"\n[FRIDA_LOCAL] Full registry scan CSV written to {csv_file} with {len(all_csv_rows)} rows.")
 
+                sd_params = {
+                    "Process": p['processName'],
+                    "pid": p['pid'],
+                    "RegistryKey": key_path,
+                    "KeyHandle": p['params']['KeyHandle'],
+                    "KeyInformationClass": p['params']['KeyInformationClass'],
+                    "KeyInformation": p['params']['KeyInformation'],
+                    "KeyInformationLength": p['params']['KeyInformationLength'],
+                    "Timestomp check result": result,
+                    "FullRegistryScanResult": f"Full registry scan CSV written to {csv_file} with {len(all_csv_rows)} rows."
+                }
+                sd_block = "["
+                for k, v in sd_params.items():
+                    sd_block += f' {k}="{v}"'
+                sd_block += "]"
+                tls_sock = ssl_setup()
+                logger = logger_setup(tls_sock)
+                logger.warning(f"Possible NtSetInformationKey Timestomping DETECTED {sd_block}")
+                tls_sock.close()
             except Exception as e:
                 print(f"[ERROR] Could not check timestomp: {e}")
 
