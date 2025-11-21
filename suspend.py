@@ -18,12 +18,18 @@ EXE_ARGS2 = [
     "2025:11:19:00:00:00:000:0000",
     "-n"
 ]
+
+EXE_ARGS3 = [
+    r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs",
+    "2025:11:19:00:00:00:000:0000",
+    "-n"
+]
 # ---------------------
 
 spawned_pid = 0
 
 try:
-    command_line = [EXE_PATH] + EXE_ARGS2
+    command_line = [EXE_PATH] + EXE_ARGS3
 
     print(f"[*] Spawning command in a suspended state:")
     print(f"    > \"{command_line[0]}\" {' '.join(command_line[1:])}")
