@@ -30,7 +30,7 @@ SPECIAL_HOOK = {
     "ntdll.dll": ["NtSetInformationKey"]
 }
 
-KIWI_HOST = "192.168.1.87"   # Your Kiwi Syslog Server IP
+KIWI_HOST = "127.0.0.1"   # Your Kiwi Syslog Server IP
 KIWI_PORT = 6514             # TLS port on Kiwi
 CA_CERT = "KiwiCert.cer"     # Base-64 exported certificate from Kiwi
 
