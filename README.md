@@ -5,7 +5,7 @@ Windows Agent for Automated Detection of Registry Timestomping
 1. Install the required dependencies using requirements.txt (pip install -r requirements.txt)
 2. Open CMD as admin, execute frida-server.exe
 3. Open another CMD as admin, run frida-local.py
-4. Attempt to registry timestomping, an alert will be generated in frida-local.py. You may use an existing POC built by Joakim Schicht [(https://github.com/jschicht/SetRegTime)]
+4. Attempt to registry timestomping, an alert will be generated in frida-local.py. You may use an existing POC built by Joakim Schicht [https://github.com/jschicht/SetRegTime]
 5. Optional: You may setup for logging by modifying parameters in frida-local.py. The program supports logging via Syslog, and if you do not have a Syslog server setup, you may refer to the guide below.
 
 ## How to setup for constant monitoring?
