@@ -52,4 +52,5 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
 ## Forwarding Logs to the Server (Python)
 
 1. Copy the exported certificate into the same folder as your Python script.
+2. Modify the ip address and port number on frida_local.py
 
