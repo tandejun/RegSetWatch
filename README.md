@@ -15,8 +15,7 @@ Windows Agent for Automated Detection of Registry Timestomping
 4. A scheduled task will also be created to run on startup
 5. On the next startup, the frida server and python script will start automatically
 
-<br>
-<br>
+
 ## Kiwi Syslog Server NG – TLS Setup & Python Forwarder
 
 This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-secured syslog messages**, export the TLS certificate, and forward logs using a Python script.
@@ -25,7 +24,6 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
 1. Download **Kiwi Syslog Server NG (Trial Version)** from SolarWinds.
 2. After installation, open the **Web Console** on localhost port 5000.
 
----
 
 ## Configure Secure TCP (TLS) Input
 
