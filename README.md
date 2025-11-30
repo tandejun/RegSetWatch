@@ -25,9 +25,9 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
 2. After installation, open the **Web Console** on localhost port 5000.
 
 
-## Configure Secure TCP (TLS) Input
+### Configure Secure TCP (TLS) Input
 
-1. Open the web console and go to:  
+1. Open the web console of Kiwi Syslog Server NG and go to:  
    **Setup → Settings → Inputs**
 2. Under **Secure TCP**, enable:  
    **Listen for secure (TLS) TCP Syslog messages**
@@ -40,9 +40,7 @@ This guide explains how to configure **Kiwi Syslog Server NG** to receive **TLS-
    - Find **Kiwi Syslog Server NG**
    - Click **Restart**
 
----
-
-## Export the TLS Certificate
+### Export the TLS Certificate
 
 1. Open **certlm.msc**
 2. Navigate to:  
